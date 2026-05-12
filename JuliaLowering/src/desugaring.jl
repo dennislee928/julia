@@ -304,7 +304,10 @@ function lower_tuple_assignment(ctx, assignment_srcref, lhss, rhs)
     stmts = SyntaxList(ctx)
     tmp = emit_assign_tmp(stmts, ctx, rhs, "rhs_tmp")
     for (i, lh) in enumerate(lhss)
-        push!(stmts, @ast ctx assignment_srcref [K"="
+        # `synthesized=true`: lowering-introduced `slot_i = getfield(tmp, i)`
+        # assignments share the user's `(a, b) = rhs` byte range, so consumers
+        # answering source-range queries skip them via `JL.is_synthesized`.
+        push!(stmts, @ast ctx assignment_srcref [K"="(synthesized=true)
             lh
             [K"call" "getfield"::K"core" tmp i::K"Integer"]
         ])
@@ -432,7 +435,12 @@ function expand_property_destruct(ctx, ex)
         propname = kind(prop) == K"Identifier"                           ? prop    :
                    kind(prop) == K"::" && kind(prop[1]) == K"Identifier" ? prop[1] :
                    throw(LoweringError(prop, "invalid assignment location"))
-        push!(stmts, expand_forms_2(ctx, @ast ctx rhs1 [K"="
+        # `synthesized=true` marks this `K"="` as lowering-introduced (the user
+        # wrote `(; prop, ...) = rhs`, not `prop = getproperty(rhs, :prop)`).
+        # Consumers like JETLS use this to skip the synthetic stmt when answering
+        # source-range queries — otherwise `getproperty(rhs, :prop)` annotations
+        # would shadow the user's RHS and the destructured binding ranges.
+        push!(stmts, expand_forms_2(ctx, @ast ctx rhs1 [K"="(synthesized=true)
             prop
             [K"call"
                 "getproperty"::K"top"
@@ -4482,7 +4490,8 @@ ensure_desugaring_attributes!(graph) = ensure_attributes!(
     ensure_macro_attributes!(graph),
     is_toplevel_thunk=Bool,
     toplevel_pure=Bool,
-    scope_type=Symbol)
+    scope_type=Symbol,
+    synthesized=Bool)
 
 @fzone "JL: desugar" function expand_forms_2(ex::SyntaxTree, world::UInt)
     graph = ensure_desugaring_attributes!(copy_attrs(ex._graph))

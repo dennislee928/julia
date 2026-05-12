@@ -60,7 +60,7 @@ JuliaSyntax.SyntaxList(ctx::AbstractLoweringContext) = SyntaxList(syntax_graph(c
 function JuliaSyntax.newleaf(ctx::AbstractLoweringContext,
                     prov::Union{SyntaxTree, SourceAttrType},
                     k::Kind)
-    newleaf(syntax_graph(ctx), prov, k)
+    _inherit_synthesized!(newleaf(syntax_graph(ctx), prov, k), prov)
 end
 
 function JuliaSyntax.newleaf(ctx, prov, k, @nospecialize(value))
@@ -95,7 +95,7 @@ end
 JuliaSyntax.newnode(ctx::AbstractLoweringContext,
                     prov::Union{SyntaxTree, SourceAttrType},
                     k::Kind, cs) =
-    newnode(syntax_graph(ctx), prov, k, cs)
+    _inherit_synthesized!(newnode(syntax_graph(ctx), prov, k, cs), prov)
 
 # Convenience functions to create leaf nodes referring to identifiers within
 # the Core and Top modules.
@@ -116,6 +116,36 @@ function emit_assign_tmp(stmts::SyntaxList, ctx, ex, name="tmp")
     var = ssavar(ctx, ex, name)
     push!(stmts, newnode(ctx, ex, K"=", tree_ids(var, ex)))
     var
+end
+
+"""
+    is_synthesized(ex::SyntaxTree) -> Bool
+
+Return `true` if `ex` was introduced by lowering rather than written by the
+user. Lowering passes set the `:synthesized` attribute on nodes they emit to
+implement source-level constructs (currently: the per-property assignments
+in named-tuple destructure like `(; a, b) = rhs`). Consumers that walk the
+EST against user source ranges — editor features answering "what's at this
+byte range" — use this to skip synthetic nodes that would otherwise shadow
+the user's expressions.
+
+The flag set at the initial emission site automatically propagates to nodes
+the same site (or any later pass) creates from that srcref via [`@ast`](@ref),
+so individual passes don't have to hand-propagate through every recreation.
+"""
+is_synthesized(ex::SyntaxTree) = get(ex, :synthesized, false)::Bool
+
+# Helper for the `@ast` macro: inherit the `:synthesized` marker from
+# `srcref` so that a node recreated from a synthetic source stays
+# synthetic without each lowering pass having to do this by hand.
+# Explicit `kind(synthesized=…)` keywords on the surrounding `@ast` form
+# are applied after this, so they can override the inherited value.
+# A non-`SyntaxTree` `srcref` (e.g. `@HERE()` returns a `SourceAttrType`)
+# can't carry the marker, so it's a no-op there.
+function _inherit_synthesized!(node::SyntaxTree, @nospecialize(srcref))
+    srcref isa SyntaxTree || return node
+    is_synthesized(srcref) && setattr!(node, :synthesized, true)
+    return node
 end
 
 #-------------------------------------------------------------------------------

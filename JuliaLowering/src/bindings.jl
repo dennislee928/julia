@@ -123,6 +123,13 @@ function _new_binding(ctx::AbstractLoweringContext, srcref::SyntaxTree,
     ex = @ast ctx srcref binding_id::K"BindingId"
     b = BindingInfo(binding_id, name, kind, ex._id; kws...)
     add_binding(ctx.bindings, b)
+    # Compiler-introduced bindings (`emit_assign_tmp`'s ssa, destructure
+    # `iterstate`, …) share the user's RHS source position, so their slot
+    # references would otherwise leak into source-range queries against the
+    # RHS. Mark the shared `K"BindingId"` node so leaves derived from it
+    # via `newleaf` inherit `:synthesized` (and linearization's `K"slot"` /
+    # `K"SSAValue"` leaves at every use site follow suit).
+    b.is_internal && setattr!(ex, :synthesized, true)
     return b
 end
 

@@ -487,7 +487,15 @@ function _convert_closures(ctx::ClosureConversionCtx, ex)
                        (ex, "function_type of local without known closure type"))
             ctx.closure_infos[func_name.var_id].type_name
         else
-            @ast ctx ex [K"call" TypeEqOf::K"core" _convert_closures(ctx, func_name)]
+            # `synthesized=true`: lowering-introduced `Core.Typeof(funcname)` call
+            # that builds the argtype svec for method defs. Its source position
+            # overlaps the function-name identifier, so source-range queries
+            # without this mark would conflate the function value's `Const(T)`
+            # with the `Const(Type{T})` produced here.
+            @ast ctx ex [K"call"(synthesized=true)
+                TypeEqOf::K"core"
+                _convert_closures(ctx, func_name)
+            ]
         end
     elseif k == K"method_defs"
         name = ex[1]
