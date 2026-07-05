@@ -867,6 +867,8 @@ static void foreach_top_nth_typename(void (*f)(jl_typename_t*, int, void*), jl_v
                 else {
                     while (1) {
                         jl_datatype_t *super = dt->super;
+                        if (super == NULL) // deferred supertype of a self-referential fragment
+                            break;
                         if (super == jl_function_type) {
                             *facts |= HAVE_FUNCTION;
                             break;
