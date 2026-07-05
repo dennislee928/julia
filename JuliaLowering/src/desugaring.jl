@@ -3850,6 +3850,9 @@ function expand_struct_def(ctx, ex, docs)
                       prev
                       newtype_var
                       [K"call" "svec"::K"core" insert_struct_shim(ctx, field_types, struct_name)...]
+                      # the type parameters: field-type TypeVars are rebound as
+                      # positional references to the wrapper's binders
+                      [K"call" "svec"::K"core" typevar_names...]
                    ]]
                 [K"constdecl"
                     global_struct_name
