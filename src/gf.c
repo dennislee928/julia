@@ -934,6 +934,15 @@ static void foreach_top_nth_typename(void (*f)(jl_typename_t*, int, void*), jl_v
             arraylist_push(&workqueue, ((jl_tvar_t*)current_a)->ub);
             arraylist_push(&workqueue, (void*)(uintptr_t)current_n);
         }
+        else if (jl_is_tvarref(current_a)) {
+            // a bound-variable reference at the scanned slot: its binder's
+            // bound is not recoverable positionally in this flattened walk,
+            // so over-approximate it by `Any` (the legacy walk pushed the
+            // variable's upper bound here; `Any` only ever adds facts, which
+            // means more typename callbacks, never fewer)
+            arraylist_push(&workqueue, (jl_value_t*)jl_any_type);
+            arraylist_push(&workqueue, (void*)(uintptr_t)current_n);
+        }
         else if (jl_is_unionall(current_a)) {
             arraylist_push(&workqueue, ((jl_unionall_t*)current_a)->body);
             arraylist_push(&workqueue, (void*)(uintptr_t)current_n);
